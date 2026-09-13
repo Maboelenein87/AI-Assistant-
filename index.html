@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prep Desk — AI Teacher Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===== LOADING (while auth state resolves) ===== -->
+  <div id="loading-screen" class="screen loading-screen">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- ===== LOGIN / SIGN UP ===== -->
+  <div id="login-screen" class="screen" style="display:none;">
+    <div class="setup-card">
+      <p class="eyebrow">Prep Desk</p>
+      <h1 id="login-heading">Sign in</h1>
+      <p class="sub">The same login works on every device — laptop, tablet, phone — and keeps everything in sync.</p>
+
+      <label class="field">
+        <span>Email</span>
+        <input type="email" id="login-email" placeholder="you@example.com">
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" id="login-password" placeholder="At least 6 characters">
+      </label>
+      <p id="login-error" class="error-text" style="display:none;"></p>
+
+      <button class="btn-primary btn-large" id="login-submit">Sign in</button>
+      <button class="btn-text" id="login-toggle">Don't have an account? Create one</button>
+    </div>
+  </div>
+
+  <!-- ===== FIRST-RUN SETUP ===== -->
+  <div id="setup-screen" class="screen" style="display:none;">
+    <div class="setup-card">
+      <p class="eyebrow">Welcome</p>
+      <h1>Let's set up your Prep Desk</h1>
+      <p class="sub">A few quick details, then you're ready to plan. This syncs across every device you sign into.</p>
+
+      <label class="field">
+        <span>Your name</span>
+        <input type="text" id="setup-name" placeholder="e.g. Ms. Nourhan">
+      </label>
+
+      <label class="field">
+        <span>Curriculum</span>
+        <select id="setup-curriculum">
+          <option value="american">American system</option>
+          <option value="british">British (IGCSE track)</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>AI API key (free)</span>
+        <input type="password" id="setup-apikey" placeholder="Paste your free key">
+        <span class="hint">Stored only on this device, not synced — you'll enter it once on each device you use. Get a free key at aistudio.google.com/apikey (no credit card needed).</span>
+      </label>
+
+      <button class="btn-primary" id="setup-continue">Continue to add a class</button>
+    </div>
+  </div>
+
+  <!-- ===== MAIN APP ===== -->
+  <div id="main-app" class="screen" style="display:none;">
+
+    <nav id="sidebar">
+      <div class="brand">
+        <span class="brand-mark">✎</span>
+        <span class="brand-name">Prep Desk</span>
+      </div>
+      <div class="nav-list">
+        <button class="nav-item active" data-view="dashboard">Dashboard</button>
+        <button class="nav-item" data-view="builder">Lesson Builder</button>
+        <button class="nav-item" data-view="studio">Content Studio</button>
+        <button class="nav-item" data-view="reflect">Reflection</button>
+        <button class="nav-item" data-view="patterns">What I've Learned</button>
+        <button class="nav-item" data-view="settings">Settings</button>
+      </div>
+      <div class="sidebar-foot">
+        <span id="teacher-name-display"></span>
+        <button class="btn-text" id="sidebar-signout" style="color:rgba(250,246,236,0.7); display:block; margin-top:8px;">Sign out</button>
+      </div>
+    </nav>
+
+    <main id="content">
+
+      <!-- WELCOME MESSAGE OVERLAY -->
+      <div id="welcome-overlay" class="welcome-overlay" style="display:none;">
+        <div class="welcome-card">
+          <p class="welcome-text">I hope this little tool makes your life a bit easier, takes some of the pressure off your shoulders, and makes the job a little less stressful for you. 🫂</p>
+          <p class="welcome-text">I really hope this year is kind to you, that everything goes smoothly, and that you have an easier time getting through all the crazy days ahead.🫂</p>
+          <p class="welcome-text">Just know that I'm always proud of you more than you probably realize.</p>
+          <p class="welcome-signoff">From Clyde with love ❤️</p>
+          <button class="btn-primary" id="welcome-close">Thank you 🫂</button>
+        </div>
+      </div>
+
+      <!-- DASHBOARD -->
+      <section id="view-dashboard" class="view active">
+        <header class="view-head">
+          <p class="eyebrow" id="dash-greeting-eyebrow">Today</p>
+          <h1 id="dash-greeting">Welcome back</h1>
+        </header>
+
+        <div class="dash-grid">
+          <div class="panel">
+            <h3>Your classes</h3>
+            <div id="dash-classes" class="chip-list"></div>
+            <button class="btn-text" id="dash-add-class">+ Add a class</button>
+          </div>
+          <div class="panel">
+            <h3>Recent lessons</h3>
+            <div id="dash-recent-lessons" class="list-simple"></div>
+          </div>
+        </div>
+
+        <button class="btn-primary btn-large" id="dash-new-lesson">Plan a new lesson</button>
+      </section>
+
+      <!-- LESSON BUILDER -->
+      <section id="view-builder" class="view">
+        <header class="view-head">
+          <p class="eyebrow">Lesson Builder</p>
+          <h1>Plan a lesson</h1>
+        </header>
+
+        <div class="panel form-panel">
+          <label class="field">
+            <span>Class</span>
+            <select id="builder-class"></select>
+          </label>
+          <label class="field">
+            <span>Topic</span>
+            <input type="text" id="builder-topic" placeholder="e.g. Living and non-living things">
+          </label>
+          <label class="field">
+            <span>Anything specific you want included? (optional)</span>
+            <input type="text" id="builder-notes" placeholder="e.g. keep it under 40 minutes, include a movement game">
+          </label>
+          <button class="btn-primary" id="builder-generate">Generate lesson</button>
+        </div>
+
+        <div id="builder-loading" class="loading-block" style="display:none;">
+          <div class="spinner"></div>
+          <p id="builder-loading-text">Thinking through the lesson…</p>
+        </div>
+
+        <div id="builder-result" class="result-block" style="display:none;">
+          <div class="result-toolbar">
+            <span class="result-label">Edit anything before you use it — Prep Desk learns from what you change.</span>
+            <div>
+              <button class="btn-secondary" id="builder-regenerate">Regenerate</button>
+              <button class="btn-primary" id="builder-save">Save lesson</button>
+            </div>
+          </div>
+          <textarea id="builder-output" rows="24"></textarea>
+        </div>
+      </section>
+
+      <!-- CONTENT STUDIO -->
+      <section id="view-studio" class="view">
+        <header class="view-head">
+          <p class="eyebrow">Content Studio</p>
+          <h1>Make ready-to-use materials</h1>
+        </header>
+
+        <div class="panel form-panel">
+          <label class="field">
+            <span>Based on which lesson?</span>
+            <select id="studio-lesson"></select>
+          </label>
+          <label class="field">
+            <span>What do you need?</span>
+            <select id="studio-type">
+              <option value="worksheet">Worksheet</option>
+              <option value="activity">Classroom activity / game</option>
+              <option value="homework">Homework sheet</option>
+              <option value="flashcards">Flashcards</option>
+              <option value="exit-ticket">Exit ticket (quick check)</option>
+            </select>
+          </label>
+          <button class="btn-primary" id="studio-generate">Generate</button>
+        </div>
+
+        <div id="studio-loading" class="loading-block" style="display:none;">
+          <div class="spinner"></div>
+          <p id="studio-loading-text">Putting it together…</p>
+        </div>
+
+        <div id="studio-result" class="result-block" style="display:none;">
+          <div class="result-toolbar">
+            <span class="result-label">Edit anything before printing or sharing.</span>
+            <div>
+              <button class="btn-secondary" id="studio-regenerate">Regenerate</button>
+              <button class="btn-primary" id="studio-save">Save to lesson</button>
+            </div>
+          </div>
+          <textarea id="studio-output" rows="22"></textarea>
+        </div>
+      </section>
+
+      <!-- REFLECTION -->
+      <section id="view-reflect" class="view">
+        <header class="view-head">
+          <p class="eyebrow">Reflection</p>
+          <h1>How did it go?</h1>
+        </header>
+
+        <div class="panel form-panel">
+          <label class="field">
+            <span>Which lesson?</span>
+            <select id="reflect-lesson"></select>
+          </label>
+          <label class="field">
+            <span>What worked well?</span>
+            <textarea id="reflect-worked" rows="3" placeholder="e.g. the sorting game — they were all engaged"></textarea>
+          </label>
+          <label class="field">
+            <span>What did students struggle with?</span>
+            <textarea id="reflect-struggled" rows="3" placeholder="e.g. a few still mixed up the two categories"></textarea>
+          </label>
+          <button class="btn-primary" id="reflect-save">Save reflection</button>
+        </div>
+
+        <div id="reflect-confirm" class="confirm-block" style="display:none;">
+          <p>Saved. This will shape the next lesson Prep Desk suggests for this class.</p>
+        </div>
+
+        <div class="panel">
+          <h3>Past reflections for this class</h3>
+          <div id="reflect-history" class="list-simple"></div>
+        </div>
+      </section>
+
+      <!-- PATTERNS -->
+      <section id="view-patterns" class="view">
+        <header class="view-head">
+          <p class="eyebrow">What I've Learned</p>
+          <h1>Patterns Prep Desk has picked up</h1>
+        </header>
+        <div id="patterns-list"></div>
+        <div id="patterns-empty" class="empty-block">
+          <p>Nothing yet — save a lesson and log a reflection, and patterns for each class will start showing up here.</p>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="view-settings" class="view">
+        <header class="view-head">
+          <p class="eyebrow">Settings</p>
+          <h1>Your setup</h1>
+        </header>
+
+        <div class="panel form-panel">
+          <h3>Profile</h3>
+          <label class="field">
+            <span>Your name</span>
+            <input type="text" id="settings-name">
+          </label>
+          <label class="field">
+            <span>Curriculum</span>
+            <select id="settings-curriculum">
+              <option value="american">American system</option>
+              <option value="british">British (IGCSE track)</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>AI API key (this device only, free)</span>
+            <input type="password" id="settings-apikey">
+            <span class="hint">Not synced to other devices — get a free key at aistudio.google.com/apikey and enter it separately wherever you use Prep Desk.</span>
+          </label>
+          <button class="btn-primary" id="settings-save">Save changes</button>
+        </div>
+
+        <div class="panel form-panel">
+          <h3>Classes</h3>
+          <div id="settings-classes" class="list-simple"></div>
+          <div class="add-class-row">
+            <select id="settings-new-year">
+              <option value="Year 1">Year 1</option>
+              <option value="Year 2">Year 2</option>
+              <option value="Year 3">Year 3</option>
+              <option value="Year 4">Year 4</option>
+            </select>
+            <select id="settings-new-subject">
+              <option>English</option>
+              <option>Math</option>
+              <option>Science</option>
+              <option>Arabic</option>
+              <option>Religion</option>
+              <option>Art</option>
+              <option>PE</option>
+              <option>Computing / ICT</option>
+              <option>Topic / Theme</option>
+            </select>
+            <input type="text" id="settings-new-section" placeholder="Section (optional, e.g. A)">
+            <button class="btn-secondary" id="settings-add-class">+ Add class</button>
+          </div>
+        </div>
+
+        <div class="panel form-panel danger-panel">
+          <h3>Data</h3>
+          <p class="hint">Your classes, lessons, and reflections sync automatically to your account and appear on every device you sign into. Only your API key stays local to this device.</p>
+          <div class="settings-actions">
+            <button class="btn-secondary" id="settings-export">Export data (.json)</button>
+            <button class="btn-danger" id="settings-clear">Delete all my data</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
