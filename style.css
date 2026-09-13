@@ -179,6 +179,59 @@ h3 { font-size: 1.05rem; margin-bottom: 12px; }
 }
 .welcome-card .btn-primary { width: 100%; }
 
+/* ===== Image gallery (Classroom Kit) ===== */
+.kit-gallery { margin-top: 18px; }
+.kit-group {
+  margin-bottom: 22px;
+}
+.kit-group h4 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1rem;
+  margin: 0 0 4px 0;
+  color: var(--chalk);
+}
+.kit-group-caption {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin: 0 0 10px 0;
+}
+.kit-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.kit-thumb {
+  display: block;
+  width: 130px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  text-decoration: none;
+  background: var(--paper-raised);
+  transition: border-color 0.15s ease;
+}
+.kit-thumb:hover { border-color: var(--sky); }
+.kit-thumb img {
+  width: 130px;
+  height: 100px;
+  object-fit: cover;
+  display: block;
+  background: var(--line);
+}
+.kit-thumb span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--sky);
+  text-align: center;
+  padding: 5px 4px;
+}
+.kit-group-empty {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
 /* ===== Setup screen ===== */
 #setup-screen {
   display: flex;

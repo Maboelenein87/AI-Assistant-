@@ -208,18 +208,19 @@
         </div>
 
         <div class="panel" id="kit-panel">
-          <h3>Classroom Kit — full deck with pictures</h3>
-          <p class="hint">Builds a downloadable PowerPoint from a saved lesson — title, objective, each step, and vocabulary, each with a real picture pulled from image search.</p>
+          <h3>Find Pictures for This Lesson</h3>
+          <p class="hint">Pulls a few picture options for each step and vocabulary word, so you can pick the ones you actually want and save them yourself — nothing is added automatically.</p>
           <label class="field">
             <span>Which lesson?</span>
             <select id="kit-lesson"></select>
           </label>
-          <button class="btn-primary" id="kit-generate">Download Classroom Kit (.pptx)</button>
+          <button class="btn-primary" id="kit-generate">Find Pictures</button>
           <div id="kit-loading" class="loading-block" style="display:none;">
             <div class="spinner"></div>
-            <p id="kit-loading-text">Finding pictures and building slides…</p>
+            <p id="kit-loading-text">Finding pictures…</p>
           </div>
           <p id="kit-error" class="error-text" style="display:none;"></p>
+          <div id="kit-gallery" class="kit-gallery"></div>
         </div>
       </section>
 
@@ -346,7 +347,6 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

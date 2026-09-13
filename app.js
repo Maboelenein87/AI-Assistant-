@@ -504,40 +504,25 @@ async function saveMaterial() {
   alert("Saved and synced to the lesson.");
 }
 
-/* ---------- Classroom Kit (PPTX with real images) ---------- */
-async function searchImage(query) {
-  if (!state.searchKey || !state.searchCx) return null;
-  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(state.searchKey)}&cx=${encodeURIComponent(state.searchCx)}&searchType=image&safe=active&num=1&q=${encodeURIComponent(query)}`;
+/* ---------- Picture Finder (browse & save individually) ---------- */
+async function searchImages(query, num) {
+  if (!state.searchKey || !state.searchCx) return [];
+  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(state.searchKey)}&cx=${encodeURIComponent(state.searchCx)}&searchType=image&safe=active&num=${num}&q=${encodeURIComponent(query)}`;
   try {
     const res = await fetch(url);
     const data = await res.json();
-    const item = data.items && data.items[0];
-    return item ? item.link : null;
+    return (data.items || []).map(item => ({
+      fullLink: item.link,
+      thumbLink: (item.image && item.image.thumbnailLink) || item.link
+    }));
   } catch (e) {
-    return null;
-  }
-}
-
-async function imageUrlToBase64(url) {
-  try {
-    const res = await fetch(url, { mode: "cors" });
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    if (!blob.type || !blob.type.startsWith("image/")) return null;
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (e) {
-    return null;
+    return [];
   }
 }
 
 async function buildKitOutline(lesson, cls) {
   const yearNote = cls ? (SUBJECT_YEAR_NOTES[cls.year] || "") : "";
-  const systemPrompt = `You turn a lesson plan into a structured slide outline for a young-children's classroom PowerPoint. Respond with ONLY valid JSON, no markdown fences, no commentary. Developmental notes: ${yearNote}.`;
+  const systemPrompt = `You turn a lesson plan into a short list of picture-worthy moments for a young-children's classroom. Respond with ONLY valid JSON, no markdown fences, no commentary. Developmental notes: ${yearNote}.`;
   const userPrompt = `Lesson content:
 """
 ${lesson.content}
@@ -546,9 +531,8 @@ ${lesson.content}
 Return JSON with this exact shape:
 {
   "title": "short lesson title",
-  "objective": "one sentence",
-  "steps": [ { "heading": "short step name", "text": "1-2 sentence instruction", "image_query": "simple search phrase for a kid-friendly clipart image illustrating this step" } ],
-  "vocabulary": [ { "word": "word", "definition": "kid-friendly one-liner", "image_query": "simple search phrase for a picture of this word" } ]
+  "steps": [ { "heading": "short step name", "image_query": "simple search phrase for a kid-friendly clipart image illustrating this step" } ],
+  "vocabulary": [ { "word": "word", "image_query": "simple search phrase for a picture of this word" } ]
 }
 Keep steps to at most 5, vocabulary to at most 5. image_query should be short and concrete (e.g. "cartoon sun clipart", "red apple clipart for kids").`;
 
@@ -557,13 +541,56 @@ Keep steps to at most 5, vocabulary to at most 5. image_query should be short an
   return JSON.parse(cleaned);
 }
 
+function renderKitGroup(container, label, items) {
+  const group = document.createElement("div");
+  group.className = "kit-group";
+  const heading = document.createElement("h4");
+  heading.textContent = label;
+  group.appendChild(heading);
+
+  if (items.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "kit-group-empty";
+    empty.textContent = "No pictures found for this one — try a different search engine site list.";
+    group.appendChild(empty);
+  } else {
+    const caption = document.createElement("p");
+    caption.className = "kit-group-caption";
+    caption.textContent = "Click a picture to open it full-size, then right-click → Save image.";
+    group.appendChild(caption);
+
+    const row = document.createElement("div");
+    row.className = "kit-thumbs";
+    items.forEach(img => {
+      const a = document.createElement("a");
+      a.className = "kit-thumb";
+      a.href = img.fullLink;
+      a.target = "_blank";
+      a.rel = "noopener";
+      const imageEl = document.createElement("img");
+      imageEl.src = img.thumbLink;
+      imageEl.loading = "lazy";
+      imageEl.alt = label;
+      a.appendChild(imageEl);
+      const span = document.createElement("span");
+      span.textContent = "Open full size";
+      a.appendChild(span);
+      row.appendChild(a);
+    });
+    group.appendChild(row);
+  }
+  container.appendChild(group);
+}
+
 async function generateClassroomKit() {
   const lessonId = document.getElementById("kit-lesson").value;
   const lesson = state.lessons.find(l => l.id === lessonId);
   const errorEl = document.getElementById("kit-error");
   const loadingEl = document.getElementById("kit-loading");
   const loadingText = document.getElementById("kit-loading-text");
+  const galleryEl = document.getElementById("kit-gallery");
   errorEl.style.display = "none";
+  galleryEl.innerHTML = "";
 
   if (!lesson) { errorEl.textContent = "Save a lesson first."; errorEl.style.display = "block"; return; }
   if (!state.apiKey) { errorEl.textContent = "Add your AI API key in Settings first."; errorEl.style.display = "block"; return; }
@@ -572,69 +599,28 @@ async function generateClassroomKit() {
     errorEl.style.display = "block";
     return;
   }
-  if (typeof PptxGenJS === "undefined") {
-    errorEl.textContent = "The slide-building library didn't load — check your internet connection and reload the page.";
-    errorEl.style.display = "block";
-    return;
-  }
 
   const cls = state.classes.find(c => c.id === lesson.classId);
   loadingEl.style.display = "flex";
 
   try {
-    loadingText.textContent = "Planning the slides…";
+    loadingText.textContent = "Working out what to search for…";
     const outline = await buildKitOutline(lesson, cls);
 
     const allItems = [
-      ...(outline.steps || []),
-      ...(outline.vocabulary || [])
+      ...(outline.steps || []).map(s => ({ label: s.heading, query: s.image_query })),
+      ...(outline.vocabulary || []).map(v => ({ label: v.word, query: v.image_query }))
     ];
-    loadingText.textContent = `Finding pictures (0/${allItems.length})…`;
+
     let done = 0;
     for (const item of allItems) {
-      const imgUrl = await searchImage(item.image_query || item.heading || item.word || outline.title);
-      item.imageData = imgUrl ? await imageUrlToBase64(imgUrl) : null;
+      loadingText.textContent = `Finding pictures (${done + 1}/${allItems.length})…`;
+      const images = await searchImages(item.query || item.label || outline.title, 4);
+      renderKitGroup(galleryEl, item.label, images);
       done++;
-      loadingText.textContent = `Finding pictures (${done}/${allItems.length})…`;
     }
-
-    loadingText.textContent = "Building the PowerPoint…";
-    const pptx = new PptxGenJS();
-    pptx.defineLayout({ name: "PREP", width: 10, height: 7.5 });
-    pptx.layout = "PREP";
-
-    // Title slide
-    let slide = pptx.addSlide();
-    slide.background = { color: "FAF6EC" };
-    slide.addText(outline.title || lesson.topic, { x: 0.5, y: 2.5, w: 9, h: 1.5, fontSize: 36, bold: true, color: "24314A", align: "center", fontFace: "Georgia" });
-    slide.addText(outline.objective || "", { x: 0.5, y: 4, w: 9, h: 1, fontSize: 18, color: "5B6478", align: "center" });
-
-    // Step slides
-    (outline.steps || []).forEach(step => {
-      const s = pptx.addSlide();
-      s.background = { color: "FFFFFF" };
-      s.addText(step.heading || "", { x: 0.5, y: 0.4, w: 9, h: 0.8, fontSize: 26, bold: true, color: "33574A" });
-      s.addText(step.text || "", { x: 0.5, y: 1.3, w: 4.2, h: 5.5, fontSize: 16, color: "24314A" });
-      if (step.imageData) {
-        s.addImage({ data: step.imageData, x: 5.1, y: 1.3, w: 4.2, h: 4.2, sizing: { type: "contain", w: 4.2, h: 4.2 } });
-      }
-    });
-
-    // Vocabulary slides
-    (outline.vocabulary || []).forEach(v => {
-      const s = pptx.addSlide();
-      s.background = { color: "FAF6EC" };
-      s.addText(v.word || "", { x: 0.5, y: 0.5, w: 9, h: 0.8, fontSize: 30, bold: true, color: "33574A", align: "center" });
-      if (v.imageData) {
-        s.addImage({ data: v.imageData, x: 3, y: 1.5, w: 4, h: 4, sizing: { type: "contain", w: 4, h: 4 } });
-      }
-      s.addText(v.definition || "", { x: 0.5, y: 5.7, w: 9, h: 1.2, fontSize: 18, color: "24314A", align: "center" });
-    });
-
-    const fileName = `${(outline.title || lesson.topic).replace(/[^a-z0-9]+/gi, "-")}-classroom-kit.pptx`;
-    await pptx.writeFile({ fileName });
   } catch (err) {
-    errorEl.textContent = "Couldn't build the kit: " + err.message;
+    errorEl.textContent = "Couldn't find pictures: " + err.message;
     errorEl.style.display = "block";
   } finally {
     loadingEl.style.display = "none";
