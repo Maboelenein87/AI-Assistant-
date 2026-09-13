@@ -18,7 +18,6 @@ import {
 
 const LOCAL_APIKEY_KEY = "prepdesk_apikey_v1";
 const LOCAL_SEARCHKEY_KEY = "prepdesk_searchkey_v1";
-const LOCAL_SEARCHCX_KEY = "prepdesk_searchcx_v1";
 const GEMINI_MODEL = "gemini-3.6-flash";
 
 const SUBJECT_YEAR_NOTES = {
@@ -36,7 +35,6 @@ let state = {
   teacher: { name: "", curriculum: "american" },
   apiKey: localStorage.getItem(LOCAL_APIKEY_KEY) || "",
   searchKey: localStorage.getItem(LOCAL_SEARCHKEY_KEY) || "",
-  searchCx: localStorage.getItem(LOCAL_SEARCHCX_KEY) || "",
   classes: [],
   lessons: [],
   reflections: []
@@ -506,14 +504,14 @@ async function saveMaterial() {
 
 /* ---------- Picture Finder (browse & save individually) ---------- */
 async function searchImages(query, num) {
-  if (!state.searchKey || !state.searchCx) return [];
-  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(state.searchKey)}&cx=${encodeURIComponent(state.searchCx)}&searchType=image&safe=active&num=${num}&q=${encodeURIComponent(query)}`;
+  if (!state.searchKey) return [];
+  const url = `https://pixabay.com/api/?key=${encodeURIComponent(state.searchKey)}&q=${encodeURIComponent(query)}&image_type=illustration&safesearch=true&per_page=${Math.max(num, 3)}`;
   try {
     const res = await fetch(url);
     const data = await res.json();
-    return (data.items || []).map(item => ({
-      fullLink: item.link,
-      thumbLink: (item.image && item.image.thumbnailLink) || item.link
+    return (data.hits || []).slice(0, num).map(hit => ({
+      fullLink: hit.largeImageURL || hit.webformatURL,
+      thumbLink: hit.previewURL || hit.webformatURL
     }));
   } catch (e) {
     return [];
@@ -594,8 +592,8 @@ async function generateClassroomKit() {
 
   if (!lesson) { errorEl.textContent = "Save a lesson first."; errorEl.style.display = "block"; return; }
   if (!state.apiKey) { errorEl.textContent = "Add your AI API key in Settings first."; errorEl.style.display = "block"; return; }
-  if (!state.searchKey || !state.searchCx) {
-    errorEl.textContent = "Add an image search API key and search engine ID in Settings first — see the setup guide.";
+  if (!state.searchKey) {
+    errorEl.textContent = "Add an image search API key in Settings first — see the setup guide.";
     errorEl.style.display = "block";
     return;
   }
@@ -706,7 +704,6 @@ function renderSettings() {
   document.getElementById("settings-curriculum").value = state.teacher.curriculum || "american";
   document.getElementById("settings-apikey").value = state.apiKey || "";
   document.getElementById("settings-searchkey").value = state.searchKey || "";
-  document.getElementById("settings-searchcx").value = state.searchCx || "";
 
   const listEl = document.getElementById("settings-classes");
   listEl.innerHTML = "";
@@ -729,15 +726,12 @@ async function saveSettingsProfile() {
   const curriculum = document.getElementById("settings-curriculum").value;
   const apiKey = document.getElementById("settings-apikey").value.trim();
   const searchKey = document.getElementById("settings-searchkey").value.trim();
-  const searchCx = document.getElementById("settings-searchcx").value.trim();
 
   await setDoc(userDocRef(), { name, curriculum }, { merge: true });
   localStorage.setItem(LOCAL_APIKEY_KEY, apiKey);
   localStorage.setItem(LOCAL_SEARCHKEY_KEY, searchKey);
-  localStorage.setItem(LOCAL_SEARCHCX_KEY, searchCx);
   state.apiKey = apiKey;
   state.searchKey = searchKey;
-  state.searchCx = searchCx;
   document.getElementById("teacher-name-display").textContent = name;
   alert("Saved.");
 }
