@@ -17,7 +17,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const LOCAL_APIKEY_KEY = "prepdesk_apikey_v1";
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.6-flash";
 
 const SUBJECT_YEAR_NOTES = {
   "Year 1": "ages ~5-6, very short attention spans (5-8 min per activity), lots of movement, picture-based, minimal reading/writing",
