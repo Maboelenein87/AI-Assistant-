@@ -206,6 +206,21 @@
           </div>
           <textarea id="studio-output" rows="22"></textarea>
         </div>
+
+        <div class="panel" id="kit-panel">
+          <h3>Classroom Kit — full deck with pictures</h3>
+          <p class="hint">Builds a downloadable PowerPoint from a saved lesson — title, objective, each step, and vocabulary, each with a real picture pulled from image search.</p>
+          <label class="field">
+            <span>Which lesson?</span>
+            <select id="kit-lesson"></select>
+          </label>
+          <button class="btn-primary" id="kit-generate">Download Classroom Kit (.pptx)</button>
+          <div id="kit-loading" class="loading-block" style="display:none;">
+            <div class="spinner"></div>
+            <p id="kit-loading-text">Finding pictures and building slides…</p>
+          </div>
+          <p id="kit-error" class="error-text" style="display:none;"></p>
+        </div>
       </section>
 
       <!-- REFLECTION -->
@@ -278,6 +293,16 @@
             <input type="password" id="settings-apikey">
             <span class="hint">Not synced to other devices — get a free key at aistudio.google.com/apikey and enter it separately wherever you use Prep Desk.</span>
           </label>
+          <label class="field">
+            <span>Image search API key (this device only, free)</span>
+            <input type="password" id="settings-searchkey">
+            <span class="hint">Powers the pictures in the Classroom Kit download. Free, from Google Cloud Console — see the setup guide.</span>
+          </label>
+          <label class="field">
+            <span>Image search engine ID (this device only)</span>
+            <input type="text" id="settings-searchcx">
+            <span class="hint">From your Programmable Search Engine at programmablesearchengine.google.com.</span>
+          </label>
           <button class="btn-primary" id="settings-save">Save changes</button>
         </div>
 
@@ -321,6 +346,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

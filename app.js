@@ -17,6 +17,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const LOCAL_APIKEY_KEY = "prepdesk_apikey_v1";
+const LOCAL_SEARCHKEY_KEY = "prepdesk_searchkey_v1";
+const LOCAL_SEARCHCX_KEY = "prepdesk_searchcx_v1";
 const GEMINI_MODEL = "gemini-3.6-flash";
 
 const SUBJECT_YEAR_NOTES = {
@@ -33,6 +35,8 @@ let unsubscribers = [];
 let state = {
   teacher: { name: "", curriculum: "american" },
   apiKey: localStorage.getItem(LOCAL_APIKEY_KEY) || "",
+  searchKey: localStorage.getItem(LOCAL_SEARCHKEY_KEY) || "",
+  searchCx: localStorage.getItem(LOCAL_SEARCHCX_KEY) || "",
   classes: [],
   lessons: [],
   reflections: []
@@ -227,6 +231,7 @@ function wireGlobalEvents() {
   document.getElementById("studio-generate").addEventListener("click", () => generateMaterial());
   document.getElementById("studio-regenerate").addEventListener("click", () => generateMaterial());
   document.getElementById("studio-save").addEventListener("click", saveMaterial);
+  document.getElementById("kit-generate").addEventListener("click", generateClassroomKit);
 
   document.getElementById("reflect-lesson").addEventListener("change", renderReflectHistory);
   document.getElementById("reflect-save").addEventListener("click", saveReflection);
@@ -259,6 +264,7 @@ function refreshAllViews() {
   populateClassSelect(document.getElementById("builder-class"));
   populateLessonSelect(document.getElementById("studio-lesson"));
   populateLessonSelect(document.getElementById("reflect-lesson"));
+  populateLessonSelect(document.getElementById("kit-lesson"));
   renderReflectHistory();
   renderPatterns();
   renderSettings();
@@ -498,6 +504,144 @@ async function saveMaterial() {
   alert("Saved and synced to the lesson.");
 }
 
+/* ---------- Classroom Kit (PPTX with real images) ---------- */
+async function searchImage(query) {
+  if (!state.searchKey || !state.searchCx) return null;
+  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(state.searchKey)}&cx=${encodeURIComponent(state.searchCx)}&searchType=image&safe=active&num=1&q=${encodeURIComponent(query)}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    const item = data.items && data.items[0];
+    return item ? item.link : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function imageUrlToBase64(url) {
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (!blob.type || !blob.type.startsWith("image/")) return null;
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
+async function buildKitOutline(lesson, cls) {
+  const yearNote = cls ? (SUBJECT_YEAR_NOTES[cls.year] || "") : "";
+  const systemPrompt = `You turn a lesson plan into a structured slide outline for a young-children's classroom PowerPoint. Respond with ONLY valid JSON, no markdown fences, no commentary. Developmental notes: ${yearNote}.`;
+  const userPrompt = `Lesson content:
+"""
+${lesson.content}
+"""
+
+Return JSON with this exact shape:
+{
+  "title": "short lesson title",
+  "objective": "one sentence",
+  "steps": [ { "heading": "short step name", "text": "1-2 sentence instruction", "image_query": "simple search phrase for a kid-friendly clipart image illustrating this step" } ],
+  "vocabulary": [ { "word": "word", "definition": "kid-friendly one-liner", "image_query": "simple search phrase for a picture of this word" } ]
+}
+Keep steps to at most 5, vocabulary to at most 5. image_query should be short and concrete (e.g. "cartoon sun clipart", "red apple clipart for kids").`;
+
+  const raw = await callAI(systemPrompt, userPrompt);
+  const cleaned = raw.replace(/```json|```/g, "").trim();
+  return JSON.parse(cleaned);
+}
+
+async function generateClassroomKit() {
+  const lessonId = document.getElementById("kit-lesson").value;
+  const lesson = state.lessons.find(l => l.id === lessonId);
+  const errorEl = document.getElementById("kit-error");
+  const loadingEl = document.getElementById("kit-loading");
+  const loadingText = document.getElementById("kit-loading-text");
+  errorEl.style.display = "none";
+
+  if (!lesson) { errorEl.textContent = "Save a lesson first."; errorEl.style.display = "block"; return; }
+  if (!state.apiKey) { errorEl.textContent = "Add your AI API key in Settings first."; errorEl.style.display = "block"; return; }
+  if (!state.searchKey || !state.searchCx) {
+    errorEl.textContent = "Add an image search API key and search engine ID in Settings first — see the setup guide.";
+    errorEl.style.display = "block";
+    return;
+  }
+  if (typeof PptxGenJS === "undefined") {
+    errorEl.textContent = "The slide-building library didn't load — check your internet connection and reload the page.";
+    errorEl.style.display = "block";
+    return;
+  }
+
+  const cls = state.classes.find(c => c.id === lesson.classId);
+  loadingEl.style.display = "flex";
+
+  try {
+    loadingText.textContent = "Planning the slides…";
+    const outline = await buildKitOutline(lesson, cls);
+
+    const allItems = [
+      ...(outline.steps || []),
+      ...(outline.vocabulary || [])
+    ];
+    loadingText.textContent = `Finding pictures (0/${allItems.length})…`;
+    let done = 0;
+    for (const item of allItems) {
+      const imgUrl = await searchImage(item.image_query || item.heading || item.word || outline.title);
+      item.imageData = imgUrl ? await imageUrlToBase64(imgUrl) : null;
+      done++;
+      loadingText.textContent = `Finding pictures (${done}/${allItems.length})…`;
+    }
+
+    loadingText.textContent = "Building the PowerPoint…";
+    const pptx = new PptxGenJS();
+    pptx.defineLayout({ name: "PREP", width: 10, height: 7.5 });
+    pptx.layout = "PREP";
+
+    // Title slide
+    let slide = pptx.addSlide();
+    slide.background = { color: "FAF6EC" };
+    slide.addText(outline.title || lesson.topic, { x: 0.5, y: 2.5, w: 9, h: 1.5, fontSize: 36, bold: true, color: "24314A", align: "center", fontFace: "Georgia" });
+    slide.addText(outline.objective || "", { x: 0.5, y: 4, w: 9, h: 1, fontSize: 18, color: "5B6478", align: "center" });
+
+    // Step slides
+    (outline.steps || []).forEach(step => {
+      const s = pptx.addSlide();
+      s.background = { color: "FFFFFF" };
+      s.addText(step.heading || "", { x: 0.5, y: 0.4, w: 9, h: 0.8, fontSize: 26, bold: true, color: "33574A" });
+      s.addText(step.text || "", { x: 0.5, y: 1.3, w: 4.2, h: 5.5, fontSize: 16, color: "24314A" });
+      if (step.imageData) {
+        s.addImage({ data: step.imageData, x: 5.1, y: 1.3, w: 4.2, h: 4.2, sizing: { type: "contain", w: 4.2, h: 4.2 } });
+      }
+    });
+
+    // Vocabulary slides
+    (outline.vocabulary || []).forEach(v => {
+      const s = pptx.addSlide();
+      s.background = { color: "FAF6EC" };
+      s.addText(v.word || "", { x: 0.5, y: 0.5, w: 9, h: 0.8, fontSize: 30, bold: true, color: "33574A", align: "center" });
+      if (v.imageData) {
+        s.addImage({ data: v.imageData, x: 3, y: 1.5, w: 4, h: 4, sizing: { type: "contain", w: 4, h: 4 } });
+      }
+      s.addText(v.definition || "", { x: 0.5, y: 5.7, w: 9, h: 1.2, fontSize: 18, color: "24314A", align: "center" });
+    });
+
+    const fileName = `${(outline.title || lesson.topic).replace(/[^a-z0-9]+/gi, "-")}-classroom-kit.pptx`;
+    await pptx.writeFile({ fileName });
+  } catch (err) {
+    errorEl.textContent = "Couldn't build the kit: " + err.message;
+    errorEl.style.display = "block";
+  } finally {
+    loadingEl.style.display = "none";
+  }
+}
+
+
 /* ---------- Reflection ---------- */
 async function saveReflection() {
   const lessonId = document.getElementById("reflect-lesson").value;
@@ -575,6 +719,8 @@ function renderSettings() {
   document.getElementById("settings-name").value = state.teacher.name || "";
   document.getElementById("settings-curriculum").value = state.teacher.curriculum || "american";
   document.getElementById("settings-apikey").value = state.apiKey || "";
+  document.getElementById("settings-searchkey").value = state.searchKey || "";
+  document.getElementById("settings-searchcx").value = state.searchCx || "";
 
   const listEl = document.getElementById("settings-classes");
   listEl.innerHTML = "";
@@ -596,10 +742,16 @@ async function saveSettingsProfile() {
   const name = document.getElementById("settings-name").value.trim();
   const curriculum = document.getElementById("settings-curriculum").value;
   const apiKey = document.getElementById("settings-apikey").value.trim();
+  const searchKey = document.getElementById("settings-searchkey").value.trim();
+  const searchCx = document.getElementById("settings-searchcx").value.trim();
 
   await setDoc(userDocRef(), { name, curriculum }, { merge: true });
   localStorage.setItem(LOCAL_APIKEY_KEY, apiKey);
+  localStorage.setItem(LOCAL_SEARCHKEY_KEY, searchKey);
+  localStorage.setItem(LOCAL_SEARCHCX_KEY, searchCx);
   state.apiKey = apiKey;
+  state.searchKey = searchKey;
+  state.searchCx = searchCx;
   document.getElementById("teacher-name-display").textContent = name;
   alert("Saved.");
 }
