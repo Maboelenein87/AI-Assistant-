@@ -61,6 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       currentUser = null;
       document.getElementById("loading-screen").style.display = "none";
+      stopPulseMessages();
       showLogin();
     }
   });
@@ -141,6 +142,7 @@ function showMainApp() {
   document.getElementById("teacher-name-display").textContent = state.teacher.name || "";
   refreshAllViews();
   maybeShowWelcome();
+  startPulseMessages();
 }
 
 const WELCOME_LOCAL_KEY = "prepdesk_welcome_last_shown_v1";
@@ -153,6 +155,46 @@ function maybeShowWelcome() {
   if (localStorage.getItem(WELCOME_LOCAL_KEY) === today) return;
   localStorage.setItem(WELCOME_LOCAL_KEY, today);
   document.getElementById("welcome-overlay").style.display = "flex";
+}
+
+/* ---------- Periodic encouragement pop-ups ---------- */
+const PULSE_MESSAGES = [
+  "You're doing a great job.",
+  "Take a little break.",
+  "I admire your resilience and dedication.",
+  "Good luck, Bunny."
+];
+let pulseTimer = null;
+let pulseScheduled = false;
+
+function schedulePulse() {
+  const minMs = 30 * 60 * 1000;
+  const maxMs = 45 * 60 * 1000;
+  const delay = minMs + Math.random() * (maxMs - minMs);
+  pulseTimer = setTimeout(() => {
+    showPulseMessage();
+    schedulePulse();
+  }, delay);
+}
+
+function startPulseMessages() {
+  if (pulseScheduled) return;
+  pulseScheduled = true;
+  schedulePulse();
+}
+
+function stopPulseMessages() {
+  if (pulseTimer) clearTimeout(pulseTimer);
+  pulseTimer = null;
+  pulseScheduled = false;
+}
+
+function showPulseMessage() {
+  if (document.getElementById("main-app").style.display === "none") return;
+  if (document.getElementById("welcome-overlay").style.display !== "none") return;
+  const msg = PULSE_MESSAGES[Math.floor(Math.random() * PULSE_MESSAGES.length)];
+  document.getElementById("pulse-text").textContent = msg;
+  document.getElementById("pulse-overlay").style.display = "flex";
 }
 
 /* ---------- Global events ---------- */
@@ -193,6 +235,10 @@ function wireGlobalEvents() {
 
   document.getElementById("welcome-close").addEventListener("click", () => {
     document.getElementById("welcome-overlay").style.display = "none";
+  });
+
+  document.getElementById("pulse-close").addEventListener("click", () => {
+    document.getElementById("pulse-overlay").style.display = "none";
   });
 
   /* Setup */
