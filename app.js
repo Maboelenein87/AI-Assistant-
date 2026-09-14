@@ -271,10 +271,30 @@ function wireGlobalEvents() {
   document.getElementById("builder-generate").addEventListener("click", () => generateLesson());
   document.getElementById("builder-regenerate").addEventListener("click", () => generateLesson());
   document.getElementById("builder-save").addEventListener("click", saveLesson);
+  document.getElementById("builder-export-word").addEventListener("click", () => {
+    const text = document.getElementById("builder-output").value;
+    const topic = document.getElementById("builder-result").dataset.topic || "lesson";
+    exportTextToWord(text, topic);
+  });
+  document.getElementById("builder-export-ppt").addEventListener("click", () => {
+    const text = document.getElementById("builder-output").value;
+    const topic = document.getElementById("builder-result").dataset.topic || "lesson";
+    exportTextToPptx(text, topic);
+  });
 
   document.getElementById("studio-generate").addEventListener("click", () => generateMaterial());
   document.getElementById("studio-regenerate").addEventListener("click", () => generateMaterial());
   document.getElementById("studio-save").addEventListener("click", saveMaterial);
+  document.getElementById("studio-export-word").addEventListener("click", () => {
+    const text = document.getElementById("studio-output").value;
+    const type = document.getElementById("studio-result").dataset.type || "material";
+    exportTextToWord(text, type);
+  });
+  document.getElementById("studio-export-ppt").addEventListener("click", () => {
+    const text = document.getElementById("studio-output").value;
+    const type = document.getElementById("studio-result").dataset.type || "material";
+    exportTextToPptx(text, type);
+  });
   document.getElementById("kit-generate").addEventListener("click", generateClassroomKit);
 
   document.getElementById("reflect-lesson").addEventListener("change", renderReflectHistory);
@@ -428,6 +448,128 @@ function buildPatternContext(classId) {
   });
   return text;
 }
+
+/* ---------- Export to Word (.docx) ---------- */
+function textToWordParagraphs(text) {
+  const lines = text.split("\n");
+  const paragraphs = [];
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\r$/, "");
+    if (line.trim() === "") continue;
+    const isHeaderLine = /:$/.test(line.trim()) && line.trim().length < 70;
+    const parts = line.split(/(\[[^\]]+\])/g).filter(p => p !== "");
+    const runs = parts.map(part => {
+      if (part.startsWith("[") && part.endsWith("]")) {
+        return new docx.TextRun({ text: "🖼 PICTURE PLACEHOLDER: " + part, italics: true, bold: true, color: "B87A16" });
+      }
+      return new docx.TextRun({ text: part, bold: isHeaderLine });
+    });
+    paragraphs.push(new docx.Paragraph({ children: runs, spacing: { after: 160 } }));
+  }
+  return paragraphs;
+}
+
+async function exportTextToWord(text, title) {
+  if (typeof docx === "undefined") {
+    alert("The Word export library didn't load — check your internet connection and reload the page.");
+    return;
+  }
+  if (!text || !text.trim()) {
+    alert("Nothing to export yet — generate content first.");
+    return;
+  }
+  const doc = new docx.Document({
+    sections: [{
+      properties: {},
+      children: [
+        new docx.Paragraph({ text: title, heading: docx.HeadingLevel.HEADING_1, spacing: { after: 200 } }),
+        ...textToWordParagraphs(text)
+      ]
+    }]
+  });
+  const blob = await docx.Packer.toBlob(doc);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${title.replace(/[^a-z0-9]+/gi, "-")}.docx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ---------- Export to PowerPoint (.pptx) ---------- */
+function textToSlideSections(text) {
+  const lines = text.split("\n").map(l => l.replace(/\r$/, "")).filter(l => l.trim() !== "");
+  const isHeaderLine = line => line.length < 60 && !line.trim().endsWith(".") && !/\[[^\]]+\]/.test(line);
+  const sections = [];
+  let current = { header: null, bodyLines: [] };
+  for (const line of lines) {
+    if (isHeaderLine(line)) {
+      if (current.header !== null || current.bodyLines.length) sections.push(current);
+      current = { header: line.replace(/:$/, ""), bodyLines: [] };
+    } else {
+      current.bodyLines.push(line);
+    }
+  }
+  if (current.header !== null || current.bodyLines.length) sections.push(current);
+  return sections;
+}
+
+async function exportTextToPptx(text, title) {
+  if (typeof PptxGenJS === "undefined") {
+    alert("The slide-building library didn't load — check your internet connection and reload the page.");
+    return;
+  }
+  if (!text || !text.trim()) {
+    alert("Nothing to export yet — generate content first.");
+    return;
+  }
+
+  const CREAM = "FAF6EC", INK = "24314A", CHALK = "33574A", CHALKDARK = "23402F", MARIGOLD = "E8A33D", SKY = "4C7F9E";
+
+  const pptx = new PptxGenJS();
+  pptx.defineLayout({ name: "PREP", width: 10, height: 7.5 });
+  pptx.layout = "PREP";
+
+  // Title slide — playful decorative shapes
+  let slide = pptx.addSlide();
+  slide.background = { color: CREAM };
+  slide.addShape(pptx.ShapeType.ellipse, { x: 8.3, y: -0.9, w: 2.3, h: 2.3, fill: { color: MARIGOLD }, line: { type: "none" } });
+  slide.addShape(pptx.ShapeType.ellipse, { x: -1.0, y: 5.9, w: 2.6, h: 2.6, fill: { color: SKY }, line: { type: "none" } });
+  slide.addShape(pptx.ShapeType.ellipse, { x: -0.5, y: -0.6, w: 1.3, h: 1.3, fill: { color: CHALK }, line: { type: "none" } });
+  slide.addText(title, { x: 0.6, y: 2.7, w: 8.8, h: 1.6, fontSize: 40, bold: true, color: CHALKDARK, align: "center", fontFace: "Georgia" });
+  slide.addText("Prep Desk ✎", { x: 0.6, y: 4.2, w: 8.8, h: 0.6, fontSize: 16, color: SKY, align: "center", italic: true, fontFace: "Verdana" });
+
+  // Content slides — one per section
+  const sections = textToSlideSections(text);
+  sections.forEach(section => {
+    const s = pptx.addSlide();
+    s.background = { color: "FFFFFF" };
+    s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.18, fill: { color: MARIGOLD }, line: { type: "none" } });
+    s.addShape(pptx.ShapeType.ellipse, { x: 9.3, y: 6.7, w: 1.1, h: 1.1, fill: { color: CREAM }, line: { color: MARIGOLD, width: 1.5 } });
+
+    let bodyTop = 0.5;
+    if (section.header) {
+      s.addText(section.header, { x: 0.5, y: 0.4, w: 9, h: 0.8, fontSize: 26, bold: true, color: CHALK, fontFace: "Georgia" });
+      bodyTop = 1.3;
+    }
+
+    const bulletItems = section.bodyLines.map(line => {
+      const match = line.match(/\[([^\]]+)\]/);
+      if (match) {
+        return { text: `🖼 Picture here: ${match[1]}`, options: { bullet: true, color: MARIGOLD, italic: true, bold: true, fontSize: 15, breakLine: true } };
+      }
+      return { text: line, options: { bullet: true, color: INK, fontSize: 15, breakLine: true } };
+    });
+
+    if (bulletItems.length) {
+      s.addText(bulletItems, { x: 0.5, y: bodyTop, w: 8.6, h: 5.7, fontFace: "Verdana", valign: "top", lineSpacingMultiple: 1.3 });
+    }
+  });
+
+  const fileName = `${title.replace(/[^a-z0-9]+/gi, "-")}.pptx`;
+  await pptx.writeFile({ fileName });
+}
+
 
 /* ---------- Lesson Builder ---------- */
 async function generateLesson() {

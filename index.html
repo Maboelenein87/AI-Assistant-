@@ -168,6 +168,8 @@
             <span class="result-label">Edit anything before you use it — Prep Desk learns from what you change.</span>
             <div>
               <button class="btn-secondary" id="builder-regenerate">Regenerate</button>
+              <button class="btn-secondary" id="builder-export-word">Export to Word (.docx)</button>
+              <button class="btn-secondary" id="builder-export-ppt">Export to PowerPoint (.pptx)</button>
               <button class="btn-primary" id="builder-save">Save lesson</button>
             </div>
           </div>
@@ -210,6 +212,8 @@
             <span class="result-label">Edit anything before printing or sharing.</span>
             <div>
               <button class="btn-secondary" id="studio-regenerate">Regenerate</button>
+              <button class="btn-secondary" id="studio-export-word">Export to Word (.docx)</button>
+              <button class="btn-secondary" id="studio-export-ppt">Export to PowerPoint (.pptx)</button>
               <button class="btn-primary" id="studio-save">Save to lesson</button>
             </div>
           </div>
@@ -351,6 +355,8 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5/build/index.umd.min.js"></script>
+<script src="https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
