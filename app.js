@@ -19,8 +19,8 @@ import {
 const LOCAL_APIKEY_KEY = "prepdesk_apikey_v1";
 const LOCAL_GROQKEY_KEY = "prepdesk_groqkey_v1";
 const LOCAL_SEARCHKEY_KEY = "prepdesk_searchkey_v1";
-const GEMINI_MODEL = "gemini-3.6-flash";
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+const GEMINI_MODEL = "gemini-flash-latest";
+const GROQ_MODEL = "openai/gpt-oss-120b";
 
 const SUBJECT_YEAR_NOTES = {
   "Year 1": "ages ~5-6, very short attention spans (5-8 min per activity), lots of movement, picture-based, minimal reading/writing",
