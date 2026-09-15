@@ -271,6 +271,12 @@ function wireGlobalEvents() {
   document.getElementById("builder-generate").addEventListener("click", () => generateLesson());
   document.getElementById("builder-regenerate").addEventListener("click", () => generateLesson());
   document.getElementById("builder-save").addEventListener("click", saveLesson);
+  document.getElementById("builder-find-pics").addEventListener("click", () => {
+    const text = document.getElementById("builder-output").value;
+    const topic = document.getElementById("builder-result").dataset.topic || "lesson";
+    const classId = document.getElementById("builder-class").value;
+    findPicturesForText(text, topic, "builder", classId);
+  });
   document.getElementById("builder-export-word").addEventListener("click", () => {
     const text = document.getElementById("builder-output").value;
     const topic = document.getElementById("builder-result").dataset.topic || "lesson";
@@ -285,6 +291,14 @@ function wireGlobalEvents() {
   document.getElementById("studio-generate").addEventListener("click", () => generateMaterial());
   document.getElementById("studio-regenerate").addEventListener("click", () => generateMaterial());
   document.getElementById("studio-save").addEventListener("click", saveMaterial);
+  document.getElementById("studio-find-pics").addEventListener("click", () => {
+    const text = document.getElementById("studio-output").value;
+    const type = document.getElementById("studio-result").dataset.type || "material";
+    const lessonId = document.getElementById("studio-lesson").value;
+    const lesson = state.lessons.find(l => l.id === lessonId);
+    const classId = lesson ? lesson.classId : null;
+    findPicturesForText(text, type, "studio", classId);
+  });
   document.getElementById("studio-export-word").addEventListener("click", () => {
     const text = document.getElementById("studio-output").value;
     const type = document.getElementById("studio-result").dataset.type || "material";
@@ -295,7 +309,6 @@ function wireGlobalEvents() {
     const type = document.getElementById("studio-result").dataset.type || "material";
     exportTextToPptx(text, type);
   });
-  document.getElementById("kit-generate").addEventListener("click", generateClassroomKit);
 
   document.getElementById("reflect-lesson").addEventListener("change", renderReflectHistory);
   document.getElementById("reflect-save").addEventListener("click", saveReflection);
@@ -328,7 +341,6 @@ function refreshAllViews() {
   populateClassSelect(document.getElementById("builder-class"));
   populateLessonSelect(document.getElementById("studio-lesson"));
   populateLessonSelect(document.getElementById("reflect-lesson"));
-  populateLessonSelect(document.getElementById("kit-lesson"));
   renderReflectHistory();
   renderPatterns();
   renderSettings();
@@ -706,21 +718,21 @@ async function searchImages(query, num) {
   }
 }
 
-async function buildKitOutline(lesson, cls) {
+async function buildKitOutline(sourceText, cls) {
   const yearNote = cls ? (SUBJECT_YEAR_NOTES[cls.year] || "") : "";
-  const systemPrompt = `You turn a lesson plan into a short list of picture-worthy moments for a young-children's classroom. Respond with ONLY valid JSON, no markdown fences, no commentary. Developmental notes: ${yearNote}.`;
-  const userPrompt = `Lesson content:
+  const systemPrompt = `You turn a piece of classroom content into a short list of picture-worthy moments, in the same order they appear. Respond with ONLY valid JSON, no markdown fences, no commentary. Developmental notes: ${yearNote}.`;
+  const userPrompt = `Content:
 """
-${lesson.content}
+${sourceText}
 """
 
 Return JSON with this exact shape:
 {
-  "title": "short lesson title",
-  "steps": [ { "heading": "short step name", "image_query": "simple search phrase for a kid-friendly clipart image illustrating this step" } ],
+  "title": "short title for this content",
+  "steps": [ { "heading": "short step or card name, matching the order in the content above", "image_query": "simple search phrase for a kid-friendly clipart image illustrating this exact step" } ],
   "vocabulary": [ { "word": "word", "image_query": "simple search phrase for a picture of this word" } ]
 }
-Keep steps to at most 5, vocabulary to at most 5. image_query should be short and concrete (e.g. "cartoon sun clipart", "red apple clipart for kids").`;
+Only include a "steps" entry for something that is actually a distinct step, card, or activity part in the content above — do not invent generic steps. If the content has no clear vocabulary list, return an empty vocabulary array. Keep steps to at most 6, vocabulary to at most 5. image_query should be short, concrete, and specific to what that exact step describes (e.g. "cartoon sun clipart", "red apple clipart for kids") — not a generic topic word.`;
 
   const raw = await callAI(systemPrompt, userPrompt);
   const cleaned = raw.replace(/```json|```/g, "").trim();
@@ -768,17 +780,15 @@ function renderKitGroup(container, label, items) {
   container.appendChild(group);
 }
 
-async function generateClassroomKit() {
-  const lessonId = document.getElementById("kit-lesson").value;
-  const lesson = state.lessons.find(l => l.id === lessonId);
-  const errorEl = document.getElementById("kit-error");
-  const loadingEl = document.getElementById("kit-loading");
-  const loadingText = document.getElementById("kit-loading-text");
-  const galleryEl = document.getElementById("kit-gallery");
+async function findPicturesForText(sourceText, title, prefix, classId) {
+  const errorEl = document.getElementById(`${prefix}-kit-error`);
+  const loadingEl = document.getElementById(`${prefix}-kit-loading`);
+  const loadingText = document.getElementById(`${prefix}-kit-loading-text`);
+  const galleryEl = document.getElementById(`${prefix}-kit-gallery`);
   errorEl.style.display = "none";
   galleryEl.innerHTML = "";
 
-  if (!lesson) { errorEl.textContent = "Save a lesson first."; errorEl.style.display = "block"; return; }
+  if (!sourceText || !sourceText.trim()) { errorEl.textContent = "Generate something first."; errorEl.style.display = "block"; return; }
   if (!state.apiKey) { errorEl.textContent = "Add your AI API key in Settings first."; errorEl.style.display = "block"; return; }
   if (!state.searchKey) {
     errorEl.textContent = "Add an image search API key in Settings first — see the setup guide.";
@@ -786,12 +796,12 @@ async function generateClassroomKit() {
     return;
   }
 
-  const cls = state.classes.find(c => c.id === lesson.classId);
+  const cls = state.classes.find(c => c.id === classId);
   loadingEl.style.display = "flex";
 
   try {
     loadingText.textContent = "Working out what to search for…";
-    const outline = await buildKitOutline(lesson, cls);
+    const outline = await buildKitOutline(sourceText, cls);
 
     const allItems = [
       ...(outline.steps || []).map(s => ({ label: s.heading, query: s.image_query })),
@@ -801,9 +811,13 @@ async function generateClassroomKit() {
     let done = 0;
     for (const item of allItems) {
       loadingText.textContent = `Finding pictures (${done + 1}/${allItems.length})…`;
-      const images = await searchImages(item.query || item.label || outline.title, 4);
+      const images = await searchImages(item.query || item.label || outline.title || title, 4);
       renderKitGroup(galleryEl, item.label, images);
       done++;
+    }
+    if (allItems.length === 0) {
+      errorEl.textContent = "Couldn't find distinct steps to search pictures for in this content.";
+      errorEl.style.display = "block";
     }
   } catch (err) {
     errorEl.textContent = "Couldn't find pictures: " + err.message;

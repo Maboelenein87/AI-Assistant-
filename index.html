@@ -168,12 +168,19 @@
             <span class="result-label">Edit anything before you use it — Prep Desk learns from what you change.</span>
             <div>
               <button class="btn-secondary" id="builder-regenerate">Regenerate</button>
+              <button class="btn-secondary" id="builder-find-pics">Find Pictures for This</button>
               <button class="btn-secondary" id="builder-export-word">Export to Word (.docx)</button>
               <button class="btn-secondary" id="builder-export-ppt">Export to PowerPoint (.pptx)</button>
               <button class="btn-primary" id="builder-save">Save lesson</button>
             </div>
           </div>
           <textarea id="builder-output" rows="24"></textarea>
+          <div id="builder-kit-loading" class="loading-block" style="display:none;">
+            <div class="spinner"></div>
+            <p id="builder-kit-loading-text">Finding pictures…</p>
+          </div>
+          <p id="builder-kit-error" class="error-text" style="display:none;"></p>
+          <div id="builder-kit-gallery" class="kit-gallery"></div>
         </div>
       </section>
 
@@ -212,28 +219,19 @@
             <span class="result-label">Edit anything before printing or sharing.</span>
             <div>
               <button class="btn-secondary" id="studio-regenerate">Regenerate</button>
+              <button class="btn-secondary" id="studio-find-pics">Find Pictures for This</button>
               <button class="btn-secondary" id="studio-export-word">Export to Word (.docx)</button>
               <button class="btn-secondary" id="studio-export-ppt">Export to PowerPoint (.pptx)</button>
               <button class="btn-primary" id="studio-save">Save to lesson</button>
             </div>
           </div>
           <textarea id="studio-output" rows="22"></textarea>
-        </div>
-
-        <div class="panel" id="kit-panel">
-          <h3>Find Pictures for This Lesson</h3>
-          <p class="hint">Pulls a few picture options for each step and vocabulary word, so you can pick the ones you actually want and save them yourself — nothing is added automatically.</p>
-          <label class="field">
-            <span>Which lesson?</span>
-            <select id="kit-lesson"></select>
-          </label>
-          <button class="btn-primary" id="kit-generate">Find Pictures</button>
-          <div id="kit-loading" class="loading-block" style="display:none;">
+          <div id="studio-kit-loading" class="loading-block" style="display:none;">
             <div class="spinner"></div>
-            <p id="kit-loading-text">Finding pictures…</p>
+            <p id="studio-kit-loading-text">Finding pictures…</p>
           </div>
-          <p id="kit-error" class="error-text" style="display:none;"></p>
-          <div id="kit-gallery" class="kit-gallery"></div>
+          <p id="studio-kit-error" class="error-text" style="display:none;"></p>
+          <div id="studio-kit-gallery" class="kit-gallery"></div>
         </div>
       </section>
 
@@ -355,7 +353,7 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/docx@8.5/build/index.umd.min.js"></script>
+<script src="docx.umd.min.js"></script>
 <script src="pptxgen.bundle.js"></script>
 <script type="module" src="app.js"></script>
 </body>
