@@ -17,8 +17,10 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const LOCAL_APIKEY_KEY = "prepdesk_apikey_v1";
+const LOCAL_GROQKEY_KEY = "prepdesk_groqkey_v1";
 const LOCAL_SEARCHKEY_KEY = "prepdesk_searchkey_v1";
 const GEMINI_MODEL = "gemini-3.6-flash";
+const GROQ_MODEL = "llama-3.3-70b-versatile";
 
 const SUBJECT_YEAR_NOTES = {
   "Year 1": "ages ~5-6, very short attention spans (5-8 min per activity), lots of movement, picture-based, minimal reading/writing",
@@ -34,6 +36,7 @@ let unsubscribers = [];
 let state = {
   teacher: { name: "", curriculum: "american" },
   apiKey: localStorage.getItem(LOCAL_APIKEY_KEY) || "",
+  groqKey: localStorage.getItem(LOCAL_GROQKEY_KEY) || "",
   searchKey: localStorage.getItem(LOCAL_SEARCHKEY_KEY) || "",
   classes: [],
   lessons: [],
@@ -407,12 +410,11 @@ function populateLessonSelect(select) {
   if (prev) select.value = prev;
 }
 
-/* ---------- AI generation (Google Gemini free tier) ---------- */
-async function callAI(systemPrompt, userPrompt) {
+/* ---------- AI generation (Gemini primary, Groq automatic fallback) ---------- */
+async function callGemini(systemPrompt, userPrompt) {
   const apiKey = state.apiKey;
-  if (!apiKey) {
-    throw new Error("No AI API key set on this device. Add one in Settings.");
-  }
+  if (!apiKey) throw new Error("No AI API key set on this device. Add one in Settings.");
+
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const response = await fetch(url, {
     method: "POST",
@@ -426,17 +428,61 @@ async function callAI(systemPrompt, userPrompt) {
   const data = await response.json();
   if (!response.ok) {
     const msg = (data.error && data.error.message) ? data.error.message : JSON.stringify(data).slice(0, 300);
-    if (response.status === 429) {
-      throw new Error("Hit the free usage limit for a moment — wait about a minute and try again.");
-    }
-    throw new Error(`AI error (${response.status}): ${msg}`);
+    throw new Error(`Gemini error (${response.status}): ${msg}`);
   }
   const candidate = data.candidates && data.candidates[0];
   const text = candidate && candidate.content && candidate.content.parts
     ? candidate.content.parts.map(p => p.text || "").join("")
     : "";
-  if (!text) throw new Error("No content came back — try regenerating.");
+  if (!text) throw new Error("Gemini returned no content.");
   return text;
+}
+
+async function callGroq(systemPrompt, userPrompt) {
+  const groqKey = state.groqKey;
+  if (!groqKey) throw new Error("No backup AI key set.");
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${groqKey}`
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      max_tokens: 3000
+    })
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    const msg = (data.error && data.error.message) ? data.error.message : JSON.stringify(data).slice(0, 300);
+    throw new Error(`Groq error (${response.status}): ${msg}`);
+  }
+  const text = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : "";
+  if (!text) throw new Error("Groq returned no content.");
+  return text;
+}
+
+async function callAI(systemPrompt, userPrompt) {
+  try {
+    return await callGemini(systemPrompt, userPrompt);
+  } catch (geminiErr) {
+    if (!state.groqKey) {
+      if (/429|busy|high demand|503|overloaded/i.test(geminiErr.message)) {
+        throw new Error(geminiErr.message + " (Tip: add a free backup AI key in Settings so this switches over automatically next time.)");
+      }
+      throw geminiErr;
+    }
+    try {
+      return await callGroq(systemPrompt, userPrompt);
+    } catch (groqErr) {
+      throw new Error(`Main AI failed (${geminiErr.message}) and backup AI also failed (${groqErr.message}).`);
+    }
+  }
 }
 
 function buildPatternContext(classId) {
@@ -905,6 +951,7 @@ function renderSettings() {
   document.getElementById("settings-name").value = state.teacher.name || "";
   document.getElementById("settings-curriculum").value = state.teacher.curriculum || "american";
   document.getElementById("settings-apikey").value = state.apiKey || "";
+  document.getElementById("settings-groqkey").value = state.groqKey || "";
   document.getElementById("settings-searchkey").value = state.searchKey || "";
 
   const listEl = document.getElementById("settings-classes");
@@ -927,12 +974,15 @@ async function saveSettingsProfile() {
   const name = document.getElementById("settings-name").value.trim();
   const curriculum = document.getElementById("settings-curriculum").value;
   const apiKey = document.getElementById("settings-apikey").value.trim();
+  const groqKey = document.getElementById("settings-groqkey").value.trim();
   const searchKey = document.getElementById("settings-searchkey").value.trim();
 
   await setDoc(userDocRef(), { name, curriculum }, { merge: true });
   localStorage.setItem(LOCAL_APIKEY_KEY, apiKey);
+  localStorage.setItem(LOCAL_GROQKEY_KEY, groqKey);
   localStorage.setItem(LOCAL_SEARCHKEY_KEY, searchKey);
   state.apiKey = apiKey;
+  state.groqKey = groqKey;
   state.searchKey = searchKey;
   document.getElementById("teacher-name-display").textContent = name;
   alert("Saved.");
